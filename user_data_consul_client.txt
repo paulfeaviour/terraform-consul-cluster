@@ -1,0 +1,32 @@
+#!/bin/bash
+
+set -e -x
+
+until $(curl --output /dev/null --silent --head --fail http://repo.eu-west-1.amazonaws.com/latest/main/mirror.list); do
+    sleep 5
+done
+
+export PRIVATE_IP=$(curl http://169.254.169.254/latest/meta-data/local-ipv4)
+export BRIDGE_IP=172.17.42.1 # Change if you're using a non-default docker bridge
+
+yum -y update
+
+yum install -y docker 
+service docker start
+usermod -aG docker ec2-user
+
+docker run -d --name consul -h $HOSTNAME \
+    -p $PRIVATE_IP:8300:8300 -p $PRIVATE_IP:8301:8301 -p $PRIVATE_IP:8301:8301/udp \
+    -p $PRIVATE_IP:8302:8302 -p $PRIVATE_IP:8302:8302/udp -p $PRIVATE_IP:8400:8400 \
+    -p $PRIVATE_IP:8500:8500 -p $BRIDGE_IP:53:53/udp \
+    progrium/consul -server -advertise $PRIVATE_IP -retry-join ${server_private_ip} 
+ 
+# docker run -d --name registrator \
+#     -v /var/run/docker.sock:/tmp/docker.sock \
+#     -h $HOSTNAME gliderlabs/registrator consul://$PRIVATE_IP:8500 
+ 
+echo "Consul Client Updated."
+
+exit 0 
+
+
